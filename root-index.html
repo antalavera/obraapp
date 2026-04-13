@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=/obraapp/">
+<title>Antalavera ObraApp</title>
+</head>
+<body>
+<script>
+  // If there's an OAuth code, save it before redirecting
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code');
+  if (code) {
+    localStorage.setItem('oauth_code_pending', code);
+    localStorage.removeItem('oauth_pending');
+  }
+  window.location.replace('/obraapp/');
+</script>
+</body>
+</html>

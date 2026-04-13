@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Conectando...</title></head>
+<body>
+<script>
+  // Capturar código OAuth y redirigir a la app
+  var params = new URLSearchParams(window.location.search);
+  var code   = params.get('code');
+  var error  = params.get('error');
+  if (code) {
+    localStorage.setItem('oauth_code_pending', code);
+    localStorage.removeItem('oauth_pending');
+    window.location.replace('/obraapp/');
+  } else if (error) {
+    localStorage.removeItem('oauth_pending');
+    window.location.replace('/obraapp/');
+  } else {
+    window.location.replace('/obraapp/');
+  }
+</script>
+<p>Conectando con Google Drive...</p>
+</body>
+</html>
