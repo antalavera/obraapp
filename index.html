@@ -108,8 +108,7 @@
 <script src="assets/dxf-viewer.js"></script>
 <script src="assets/firma.js"></script>
 <script src="assets/drive-estudio.js"></script>
-<script src="assets/drive-sync.js"></script>
-<script src="assets/sync.js"></script>
+<script src="assets/drive-core.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/app-ext.js"></script>
 <script src="assets/brand-init.js"></script>
@@ -117,8 +116,26 @@
   <script src="assets/transcripcion.js"></script>
   <script src="assets/drive-fix.js"></script>
 <script>
+  // Capturar código OAuth al volver de Google
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var code   = params.get('code');
+    var error  = params.get('error');
+    if (code) {
+      localStorage.setItem('oauth_code_pending', code);
+      localStorage.removeItem('oauth_pending');
+      history.replaceState({}, document.title, window.location.pathname);
+    } else if (error) {
+      localStorage.removeItem('oauth_pending');
+      history.replaceState({}, document.title, window.location.pathname);
+    }
+  })();
+
   if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-  if(window.innerWidth<=768) document.getElementById('mobile-menu-btn').style.display='flex';
+  if(window.innerWidth<=768) {
+    var mmb = document.getElementById('mobile-menu-btn');
+    if(mmb) mmb.style.display='flex';
+  }
   if(window.location.hash.includes('access_token')&&window.opener) window.close();
 </script>
 </body>

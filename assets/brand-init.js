@@ -530,20 +530,19 @@ App.navigate = function(view, param) {
       card.innerHTML = `
         <div class="section-header mb-2">
           <div class="section-title">🔔 Notificaciones</div>
-          <span id="notif-status" style="font-size:12px;color:${Notification.permission==='granted'?'var(--green)':Notification.permission==='denied'?'var(--red)':'var(--text3)'}">
-            ${Notification.permission==='granted'?'✅ Activas':Notification.permission==='denied'?'🚫 Bloqueadas':'Sin activar'}
-          </span>
+          <span id="notif-status" style="font-size:12px;color:var(--text3)">Comprobando...</span>
         </div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
           Recibe alertas en tu dispositivo: eventos del día, plazos de fin de obra, incidencias abiertas y proyectos sin actividad.
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" id="notif-toggle-btn" onclick="Notificaciones.solicitarPermiso().then(()=>Notificaciones._actualizarBoton())">🔔 Activar notificaciones</button>
+          <button class="btn btn-primary" id="notif-toggle-btn">🔔 Activar notificaciones</button>
           <button class="btn btn-ghost" onclick="Notificaciones.probar()">📨 Prueba</button>
         </div>
       `;
       main.appendChild(card);
+      // Actualizar botón según estado real
+      setTimeout(() => Notificaciones._actualizarBoton(), 100);
       // Añadir tarjeta de transcripción
       if (typeof Transcripcion !== 'undefined') {
         Transcripcion.renderConfigCard(main);

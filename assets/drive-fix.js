@@ -18,8 +18,9 @@ function fixConnectButton() {
     if (!id) { alert('Introduce el Client ID'); return; }
     if (!sc) { alert('Introduce el Client Secret'); return; }
 
-    localStorage.setItem('drive_client_id', id);
+    localStorage.setItem('drive_client_id',     id);
     localStorage.setItem('drive_client_secret', sc);
+    localStorage.setItem('oauth_client_id',     id);  // backup key
 
     // PKCE sincrono
     var arr = new Uint8Array(32);
@@ -197,6 +198,21 @@ document.addEventListener('DOMContentLoaded', function() {
         var verifier = localStorage.getItem('oauth_verifier') || '';
         var isGitHub2  = window.location.hostname.includes('github.io');
         var REDIRECT = isGitHub2 ? 'https://antalavera.github.io' : window.location.origin;
+
+        // Debug info visible
+        console.log('[OAuth] pendingCode found, id:', !!id, 'sc:', !!sc, 'verifier:', !!verifier, 'redirect:', REDIRECT);
+
+        if (!id || !sc) {
+          var msg = 'No se encontraron las credenciales de Google. Ve a Perfil del estudio e introduce Client ID y Client Secret antes de conectar.';
+          Toast && Toast.show(msg, 'error');
+          alert(msg);
+          return;
+        }
+        if (!verifier) {
+          var msg2 = 'Error de sesión OAuth. Inténtalo de nuevo desde Perfil del estudio.';
+          Toast && Toast.show(msg2, 'error');
+          return;
+        }
         if (id && sc && verifier) {
           fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
@@ -256,7 +272,7 @@ document.addEventListener('DOMContentLoaded', function() {
           .catch(function(e) { alert('Error: ' + e.message); });
         }
       }
-    }, 2000);
+    }, 3000);
   }
 });
 
@@ -471,7 +487,8 @@ function addSyncButton() {
       var ev = await DB.getAll('events').catch(function(){return [];});
       var pr = await DB.getAll('projects').catch(function(){return [];});
       addLog('↑ Subiendo ' + pr.length + ' proyectos, ' + ev.length + ' eventos...');
-      await Sync.push(function(msg) { addLog('  ' + msg); });
+      const s1 = typeof DriveCore !== 'undefined' ? DriveCore : Sync;
+      await s1.push(function(msg) { addLog('  ' + msg); });
       addLog('✅ Subida completada');
       Toast.show('Datos subidos a Drive ✓', 'success');
     } catch(e) {
@@ -493,7 +510,8 @@ function addSyncButton() {
     var addLog = function(msg) { log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; };
     try {
       addLog('↓ Leyendo datos desde Drive...');
-      await Sync.pull(function(msg) { addLog('  ' + msg); });
+      const s2 = typeof DriveCore !== 'undefined' ? DriveCore : Sync;
+      await s2.pull(function(msg) { addLog('  ' + msg); });
       addLog('✅ Descarga completada');
       Toast.show('Datos descargados desde Drive ✓', 'success');
       setTimeout(function() {

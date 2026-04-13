@@ -1,20 +1,44 @@
 {
-  "name": "Antalavera Arquitectura — ObraApp",
+  "name": "ObraApp — Gestión de Obras y Reuniones",
   "short_name": "ObraApp",
-  "description": "Gestión profesional de visitas de obra y reuniones",
+  "description": "Gestión y control de visitas de obra y reuniones de trabajo",
   "start_url": "/obraapp/",
-  "scope": "/obraapp/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#1e1f21",
-  "theme_color": "#29b6c8",
+  "background_color": "#f0f2f5",
+  "theme_color": "#f97316",
   "icons": [
-    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ],
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "lang": "es",
   "shortcuts": [
-    { "name": "Nuevo evento", "url": "/obraapp/", "description": "Crear nuevo evento" }
-  ]
+    {
+      "name": "Nueva visita de obra",
+      "short_name": "Nueva obra",
+      "url": "/#new-obra",
+      "description": "Crear nueva visita de obra"
+    },
+    {
+      "name": "Nueva reunión",
+      "short_name": "Reunión",
+      "url": "/#new-reunion",
+      "description": "Crear nueva reunión"
+    }
+  ],
+  "scope": "/obraapp/"
 }

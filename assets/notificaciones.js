@@ -231,23 +231,31 @@ const Notificaciones = {
     clearInterval(this._intervalo);
     this._intervalo = null;
     this._permiso   = false;
-    Toast.show('Notificaciones pausadas en esta sesión. Para desactivarlas permanentemente, hazlo en ajustes del navegador.');
-    Notificaciones._actualizarBoton();
+    Toast.show('Notificaciones pausadas ✓');
+    setTimeout(() => Notificaciones._actualizarBoton(), 50);
   },
 
   _actualizarBoton() {
     const btn  = document.getElementById('notif-toggle-btn');
     const stat = document.getElementById('notif-status');
     if (!btn) return;
-    if (this._permiso && Notification.permission === 'granted') {
-      btn.textContent  = '🔕 Pausar notificaciones';
-      btn.className    = 'btn btn-secondary';
-      btn.onclick      = () => Notificaciones.desactivar();
+    const granted = Notification.permission === 'granted';
+    const activas = granted && this._permiso;
+
+    if (activas) {
+      btn.textContent = '🔕 Pausar notificaciones';
+      btn.className   = 'btn btn-secondary';
+      btn.onclick     = () => { Notificaciones.desactivar(); };
       if (stat) { stat.textContent = '✅ Activas'; stat.style.color = 'var(--green)'; }
+    } else if (granted && !this._permiso) {
+      btn.textContent = '🔔 Reactivar notificaciones';
+      btn.className   = 'btn btn-primary';
+      btn.onclick     = () => { Notificaciones._permiso = true; Notificaciones.init(); Notificaciones._actualizarBoton(); };
+      if (stat) { stat.textContent = '⏸️ Pausadas'; stat.style.color = 'var(--yellow-corp)'; }
     } else {
-      btn.textContent  = '🔔 Activar notificaciones';
-      btn.className    = 'btn btn-primary';
-      btn.onclick      = () => Notificaciones.solicitarPermiso().then(() => Notificaciones._actualizarBoton());
+      btn.textContent = '🔔 Activar notificaciones';
+      btn.className   = 'btn btn-primary';
+      btn.onclick     = () => Notificaciones.solicitarPermiso().then(() => Notificaciones._actualizarBoton());
       if (stat) { stat.textContent = Notification.permission === 'denied' ? '🚫 Bloqueadas' : 'Sin activar'; stat.style.color = 'var(--text3)'; }
     }
   },

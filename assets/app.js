@@ -459,7 +459,8 @@ const App = {
     }
 
     // 3. Registrar borrado para sync
-    if (typeof Sync !== 'undefined') Sync.recordDeletion('project', id, null);
+    const sc2 = typeof DriveCore !== 'undefined' ? DriveCore : (typeof Sync !== 'undefined' ? Sync : null);
+    if (sc2) sc2.recordDeletion('project', id);
 
     // 4. Eliminar el proyecto
     await DB.delete('projects', id).catch(()=>{});
@@ -1469,9 +1470,8 @@ const App = {
       await DB.delete('events', id);
 
       // Register deletion to prevent sync re-import
-      if (typeof Sync !== 'undefined') {
-        Sync.recordDeletion('event', id, ev ? (ev.project || '') : '');
-      }
+      const sc = typeof DriveCore !== 'undefined' ? DriveCore : (typeof Sync !== 'undefined' ? Sync : null);
+      if (sc) sc.recordDeletion('event', id);
 
       document.querySelector('.modal-backdrop')?.remove();
       Toast.show('Evento eliminado ✓', 'success');
@@ -1784,7 +1784,13 @@ const App = {
   async toggleRecording(){if(this._isRecording)this._stopRec();else this._startRec();},
   async _startRec(){
     try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      this._audioChunks=[];this._audioRecorder=new MediaRecorder(stream);
+      this._audioChunks=[];
+      // Android necesita codec específico
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                     : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                     : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                     : '';
+      this._audioRecorder=new MediaRecorder(stream, mimeType ? {mimeType} : {});
       this._audioRecorder.ondataavailable=e=>{if(e.data.size>0)this._audioChunks.push(e.data);};
       this._audioRecorder.onstop=async()=>{
         stream.getTracks().forEach(t=>t.stop());
@@ -1854,6 +1860,35 @@ const App = {
 
   /* ─── Cámara ─── */
   openCamera(){
+    // En móvil Android, usar input file con capture es más fiable que getUserMedia
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // cámara trasera
+      input.style.display = 'none';
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const dataUrl = await this.compressImage(file);
+        let pos = null;
+        try { pos = await Geo.getCurrentPosition(); } catch(e) {}
+        const m = await DB.put('media', {
+          eventId: this.currentEventId,
+          dataUrl, type: 'image/jpeg',
+          lat: pos?.lat, lng: pos?.lng
+        });
+        const grid = document.getElementById('media-grid');
+        if (grid) grid.insertBefore(this._buildMediaItem(m), grid.firstChild);
+        Toast.show('Foto guardada ✓', 'success');
+        input.remove();
+      };
+      document.body.appendChild(input);
+      input.click();
+      return;
+    }
+    // PC: usar getUserMedia
     const modal=this.createModal('Cámara','<video id="cam-stream" autoplay playsinline muted style="width:100%;border-radius:8px"></video><div class="camera-controls" style="margin-top:10px;display:flex;justify-content:center;gap:16px;align-items:center"><button class="btn btn-secondary btn-icon" onclick="App._flipCam()">🔄</button><div class="capture-btn" onclick="App.capturePhoto()"></div><button class="btn btn-secondary btn-icon" onclick="App.closeCamera()">✕</button></div><canvas id="cam-canvas" style="display:none"></canvas>','modal-lg');
     document.body.appendChild(modal);this._camFacing='environment';this._startCam();
   },
