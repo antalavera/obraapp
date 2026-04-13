@@ -35,9 +35,12 @@ function fixConnectButton() {
 
         // En Electron usamos el servidor local; en web usamos la URL actual
         var isElectron = !!(window.electronAPI && window.electronAPI.isElectron);
+        var isGitHub   = window.location.hostname.includes('github.io');
         var REDIRECT = isElectron
           ? 'http://127.0.0.1:3737'
-          : window.location.origin;
+          : isGitHub
+            ? 'https://antalavera.github.io'
+            : window.location.origin;
 
         var SCOPES = 'https://www.googleapis.com/auth/drive.file '
                    + 'https://www.googleapis.com/auth/gmail.send '
@@ -192,7 +195,8 @@ document.addEventListener('DOMContentLoaded', function() {
         var id = localStorage.getItem('oauth_client_id') || localStorage.getItem('drive_client_id') || '';
         var sc = localStorage.getItem('drive_client_secret') || '';
         var verifier = localStorage.getItem('oauth_verifier') || '';
-        var REDIRECT = window.location.origin;
+        var isGitHub2  = window.location.hostname.includes('github.io');
+        var REDIRECT = isGitHub2 ? 'https://antalavera.github.io' : window.location.origin;
         if (id && sc && verifier) {
           fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
