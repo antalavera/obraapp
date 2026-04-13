@@ -9,29 +9,12 @@
   "background_color": "#1e1f21",
   "theme_color": "#29b6c8",
   "icons": [
-    {
-      "src": "assets/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "assets/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
-  "categories": [
-    "business",
-    "productivity"
-  ],
+  "categories": ["business", "productivity"],
   "lang": "es",
   "shortcuts": [
-    {
-      "name": "Nuevo evento",
-      "url": "/obraapp/",
-      "description": "Crear nuevo evento"
-    }
+    { "name": "Nuevo evento", "url": "/obraapp/", "description": "Crear nuevo evento" }
   ]
 }

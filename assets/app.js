@@ -34,7 +34,10 @@ const App = {
       document.getElementById('sidebar').classList.toggle('collapsed');
     });
     document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
-      document.getElementById('sidebar').classList.toggle('mobile-open');
+      const sidebar  = document.getElementById('sidebar');
+      const overlay  = document.getElementById('sidebar-overlay');
+      const isOpen   = sidebar.classList.toggle('mobile-open');
+      if (overlay) overlay.style.display = isOpen ? 'block' : 'none';
     });
   },
 
@@ -46,6 +49,11 @@ const App = {
     const title   = document.getElementById('topbar-title');
     const actions = document.getElementById('topbar-actions');
     actions.innerHTML = '';
+    // Cerrar sidebar en móvil al navegar
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.remove('mobile-open');
+    if (overlay) overlay.style.display = 'none';
     if (typeof Geo !== 'undefined') Geo.destroyMap?.();
     switch(view) {
       case 'dashboard':      this.renderDashboard(content, title, actions); break;
