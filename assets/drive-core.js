@@ -422,6 +422,12 @@ const DriveCore = {
 
   async init() {
     this.loadConfig();
+    // Re-read token in case OAuth completed after initial load
+    const freshToken = localStorage.getItem('drive_token');
+    if (freshToken && !this.token) {
+      this.token = freshToken;
+      this.email = localStorage.getItem('drive_user_email') || '';
+    }
     if (!this.isConnected) {
       this.setStatus('disconnected', 'Drive: no conectado');
       return;
@@ -466,13 +472,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
 /* Callback tras OAuth */
 window.__onDriveConnected = function(token, email) {
-  DriveCore.token  = token;
-  DriveCore.email  = email;
+  DriveCore.token        = token;
+  DriveCore.email        = email;
+  DriveCore.clientId     = localStorage.getItem('drive_client_id')     || DriveCore.clientId;
+  DriveCore.clientSecret = localStorage.getItem('drive_client_secret') || DriveCore.clientSecret;
   DriveCore.saveConfig();
   DriveCore.setStatus('connected', email);
-  DriveCore.init();
-  // Subir configuración inmediatamente para que otros dispositivos la tengan
-  setTimeout(() => DriveCore.push(() => {}).catch(() => {}), 1500);
+  // No llamar a init() otra vez para evitar pull automático en PC
+  // Solo interceptar DB.put si no está ya hookeado
+  if (!DB._driveCoreHooked) {
+    const origPut = DB.put.bind(DB);
+    DB.put = async (store, data) => {
+      const result = await origPut(store, data);
+      DriveCore.queuePush();
+      return result;
+    };
+    DB._driveCoreHooked = true;
+  }
+  setTimeout(() => DriveCore.push(() => {}).catch(() => {}), 2000);
 };
 
 /* Exponer para compatibilidad con drive-fix.js */
