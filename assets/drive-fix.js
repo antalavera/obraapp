@@ -40,7 +40,7 @@ function fixConnectButton() {
         var REDIRECT = isElectron
           ? 'http://127.0.0.1:3737'
           : isGitHub
-            ? 'https://antalavera.github.io'
+            ? 'https://antalavera.github.io/obraapp/'
             : window.location.origin;
 
         var SCOPES = 'https://www.googleapis.com/auth/drive.file '
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var sc = localStorage.getItem('drive_client_secret') || '';
         var verifier = localStorage.getItem('oauth_verifier') || '';
         var isGitHub2  = window.location.hostname.includes('github.io');
-        var REDIRECT = isGitHub2 ? 'https://antalavera.github.io' : window.location.origin;
+        var REDIRECT = isGitHub2 ? 'https://antalavera.github.io/obraapp/' : window.location.origin;
 
         // Debug info visible
         console.log('[OAuth] pendingCode found, id:', !!id, 'sc:', !!sc, 'verifier:', !!verifier, 'redirect:', REDIRECT);
