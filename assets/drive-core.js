@@ -256,7 +256,12 @@ const DriveCore = {
       // Subir proyectos
       const proyFolder = await this.folder('PROYECTOS', rootId);
       for (const p of projects) {
-        const pName = (p.nombre || p.name || p.id).replace(/[/\\:*?"<>|]/g, '_');
+        // Nombre único: expediente + nombre (o ID si no hay expediente)
+        const pExp   = (p.referencia || p.expediente || '').trim();
+        const pTitle = (p.nombre || p.name || '').trim();
+        const pName  = (pExp ? pExp + ' — ' + pTitle : pTitle || p.id)
+                         .replace(/[/\\:*?"<>|]/g, '_')
+                         .slice(0, 80); // máx 80 chars
         const pFolder = await this.folder(pName, proyFolder);
 
         // Ficha del proyecto
