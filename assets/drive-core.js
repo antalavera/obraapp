@@ -235,6 +235,24 @@ const DriveCore = {
   },
 
   /* Push: sube todos los datos locales a Drive */
+  /* Obtener registro de lo último subido a Drive */
+  _getPushRegistry() {
+    try { return JSON.parse(localStorage.getItem('sync_push_registry') || '{}'); }
+    catch { return {}; }
+  },
+  _setPushRegistry(reg) {
+    localStorage.setItem('sync_push_registry', JSON.stringify(reg));
+  },
+  _needsUpload(id, updatedAt) {
+    const reg = this._getPushRegistry();
+    return !reg[id] || reg[id] < (updatedAt || '');
+  },
+  _markUploaded(id, updatedAt) {
+    const reg = this._getPushRegistry();
+    reg[id] = updatedAt || new Date().toISOString();
+    this._setPushRegistry(reg);
+  },
+
   async push(onProgress) {
     if (!this.isConnected || this._syncing) return;
     this._syncing = true;
@@ -250,54 +268,71 @@ const DriveCore = {
         DB.getAll('contacts').catch(() => []),
       ]);
 
-      // Subir configuración
+      // Subir configuración siempre
       await this.pushConfig().catch(() => {});
+
+      let uploaded = 0;
+      let skipped  = 0;
 
       // Subir proyectos
       const proyFolder = await this.folder('PROYECTOS', rootId);
       for (const p of projects) {
-        // Nombre único: expediente + nombre (o ID si no hay expediente)
         const pExp   = (p.referencia || p.expediente || '').trim();
         const pTitle = (p.nombre || p.name || '').trim();
         const pName  = (pExp ? pExp + ' — ' + pTitle : pTitle || p.id)
-                         .replace(/[/\\:*?"<>|]/g, '_')
-                         .slice(0, 80); // máx 80 chars
+                         .replace(/[/\\:*?"<>|]/g, '_').slice(0, 80);
         const pFolder = await this.folder(pName, proyFolder);
 
-        // Ficha del proyecto
-        const fichaId = await this.findFile('PROYECTO.json', pFolder);
-        await this.uploadJson('PROYECTO.json', p, pFolder, fichaId);
+        // Solo subir si cambió desde la última subida
+        if (this._needsUpload(p.id, p.updatedAt)) {
+          const fichaId = await this.findFile('PROYECTO.json', pFolder);
+          await this.uploadJson('PROYECTO.json', p, pFolder, fichaId);
+          this._markUploaded(p.id, p.updatedAt);
+          uploaded++;
+          onProgress?.('  ↑ ' + pName);
+        } else {
+          skipped++;
+        }
 
         // Eventos del proyecto
         const evFolder = await this.folder('EVENTOS', pFolder);
         const proyEvents = events.filter(e => e.projectId === p.id);
 
         for (const ev of proyEvents) {
-          const evName = (ev.date || '') + '_' + (ev.title || ev.id).replace(/[/\\:*?"<>|]/g, '_');
-          const evFolder2 = await this.folder(evName.slice(0, 50), evFolder);
+          if (this._needsUpload(ev.id, ev.updatedAt)) {
+            const evName = (ev.date || '') + '_' + (ev.title || ev.id).replace(/[/\\:*?"<>|]/g, '_');
+            const evFolder2 = await this.folder(evName.slice(0, 50), evFolder);
+            const evFileId  = await this.findFile('EVENTO.json', evFolder2);
+            await this.uploadJson('EVENTO.json', ev, evFolder2, evFileId);
 
-          // Datos del evento
-          const evFileId = await this.findFile('EVENTO.json', evFolder2);
-          await this.uploadJson('EVENTO.json', ev, evFolder2, evFileId);
-
-          // Notas
-          const notes = await DB.getAll('notes', 'eventId', ev.id).catch(() => []);
-          if (notes.length) {
-            const notasId = await this.findFile('NOTAS.json', evFolder2);
-            await this.uploadJson('NOTAS.json', notes, evFolder2, notasId);
+            // Notas
+            const notes = await DB.getAll('notes', 'eventId', ev.id).catch(() => []);
+            if (notes.length) {
+              const notasId = await this.findFile('NOTAS.json', evFolder2);
+              await this.uploadJson('NOTAS.json', notes, evFolder2, notasId);
+            }
+            this._markUploaded(ev.id, ev.updatedAt);
+            uploaded++;
+          } else {
+            skipped++;
           }
         }
-        onProgress?.('  ✓ ' + pName);
       }
 
-      // Subir contactos globales
+      // Contactos — solo si hay cambios
       if (contacts.length) {
-        const contFile = await this.findFile('CONTACTOS.json', rootId);
-        await this.uploadJson('CONTACTOS.json', contacts, rootId, contFile);
+        const contKey = 'contacts_all';
+        const contUpdated = contacts.reduce((max, c) => c.updatedAt > max ? c.updatedAt : max, '');
+        if (this._needsUpload(contKey, contUpdated)) {
+          const contFile = await this.findFile('CONTACTOS.json', rootId);
+          await this.uploadJson('CONTACTOS.json', contacts, rootId, contFile);
+          this._markUploaded(contKey, contUpdated);
+          uploaded++;
+        }
       }
 
       localStorage.setItem('sync_last_push', new Date().toISOString());
-      onProgress?.('✅ Subida completada');
+      onProgress?.('✅ Subida: ' + uploaded + ' actualizados, ' + skipped + ' sin cambios');
 
     } finally {
       this._syncing = false;
@@ -472,7 +507,34 @@ const DriveCore = {
    ARRANQUE AUTOMÁTICO
 ════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
+  // Init inicial
   setTimeout(() => DriveCore.init(), 800);
+
+  // Vigilar si el token aparece después (OAuth en misma pestaña)
+  let _watchCount = 0;
+  const _watchToken = setInterval(() => {
+    _watchCount++;
+    if (_watchCount > 30) { clearInterval(_watchToken); return; } // máx 30s
+    const token = localStorage.getItem('drive_token');
+    if (token && !DriveCore.token) {
+      // Token apareció — reconectar
+      DriveCore.loadConfig();
+      DriveCore.setStatus('connected', DriveCore.email || 'conectado');
+      if (!DB._driveCoreHooked) {
+        const origPut = DB.put.bind(DB);
+        DB.put = async (store, data) => {
+          const result = await origPut(store, data);
+          DriveCore.queuePush();
+          return result;
+        };
+        DB._driveCoreHooked = true;
+      }
+      clearInterval(_watchToken);
+      // Actualizar UI sidebar
+      const el = document.getElementById('drive-sidebar-status');
+      if (el) { el.textContent = '☁️ Drive: ' + (DriveCore.email || 'conectado'); el.style.color = 'rgba(41,182,200,.8)'; }
+    }
+  }, 1000);
 });
 
 /* Callback tras OAuth */
