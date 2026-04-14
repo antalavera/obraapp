@@ -235,7 +235,7 @@ const DriveCore = {
   },
 
   /* Push: sube todos los datos locales a Drive */
-  /* Obtener registro de lo último subido a Drive */
+  /* Registro de hashes para detectar cambios reales */
   _getPushRegistry() {
     try { return JSON.parse(localStorage.getItem('sync_push_registry') || '{}'); }
     catch { return {}; }
@@ -243,13 +243,24 @@ const DriveCore = {
   _setPushRegistry(reg) {
     localStorage.setItem('sync_push_registry', JSON.stringify(reg));
   },
-  _needsUpload(id, updatedAt) {
-    const reg = this._getPushRegistry();
-    return !reg[id] || reg[id] < (updatedAt || '');
+  _hash(obj) {
+    // Simple hash basado en JSON stringify
+    const str = JSON.stringify(obj);
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return String(h);
   },
-  _markUploaded(id, updatedAt) {
-    const reg = this._getPushRegistry();
-    reg[id] = updatedAt || new Date().toISOString();
+  _needsUpload(id, obj) {
+    const reg  = this._getPushRegistry();
+    const hash = this._hash(obj);
+    return reg[id] !== hash;
+  },
+  _markUploaded(id, obj) {
+    const reg  = this._getPushRegistry();
+    reg[id]    = this._hash(obj);
     this._setPushRegistry(reg);
   },
 
@@ -284,10 +295,10 @@ const DriveCore = {
         const pFolder = await this.folder(pName, proyFolder);
 
         // Solo subir si cambió desde la última subida
-        if (this._needsUpload(p.id, p.updatedAt)) {
+        if (this._needsUpload(p.id, p)) {
           const fichaId = await this.findFile('PROYECTO.json', pFolder);
           await this.uploadJson('PROYECTO.json', p, pFolder, fichaId);
-          this._markUploaded(p.id, p.updatedAt);
+          this._markUploaded(p.id, p);
           uploaded++;
           onProgress?.('  ↑ ' + pName);
         } else {
@@ -299,7 +310,7 @@ const DriveCore = {
         const proyEvents = events.filter(e => e.projectId === p.id);
 
         for (const ev of proyEvents) {
-          if (this._needsUpload(ev.id, ev.updatedAt)) {
+          if (this._needsUpload(ev.id, ev)) {
             const evName = (ev.date || '') + '_' + (ev.title || ev.id).replace(/[/\\:*?"<>|]/g, '_');
             const evFolder2 = await this.folder(evName.slice(0, 50), evFolder);
             const evFileId  = await this.findFile('EVENTO.json', evFolder2);
@@ -311,7 +322,7 @@ const DriveCore = {
               const notasId = await this.findFile('NOTAS.json', evFolder2);
               await this.uploadJson('NOTAS.json', notes, evFolder2, notasId);
             }
-            this._markUploaded(ev.id, ev.updatedAt);
+            this._markUploaded(ev.id, ev);
             uploaded++;
           } else {
             skipped++;
@@ -323,10 +334,10 @@ const DriveCore = {
       if (contacts.length) {
         const contKey = 'contacts_all';
         const contUpdated = contacts.reduce((max, c) => c.updatedAt > max ? c.updatedAt : max, '');
-        if (this._needsUpload(contKey, contUpdated)) {
+        if (this._needsUpload(contKey, contacts)) {
           const contFile = await this.findFile('CONTACTOS.json', rootId);
           await this.uploadJson('CONTACTOS.json', contacts, rootId, contFile);
-          this._markUploaded(contKey, contUpdated);
+          this._markUploaded(contKey, contacts);
           uploaded++;
         }
       }
