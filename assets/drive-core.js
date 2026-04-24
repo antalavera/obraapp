@@ -310,22 +310,78 @@ const DriveCore = {
         const proyEvents = events.filter(e => e.projectId === p.id);
 
         for (const ev of proyEvents) {
-          if (this._needsUpload(ev.id, ev)) {
-            const evName = (ev.date || '') + '_' + (ev.title || ev.id).replace(/[/\\:*?"<>|]/g, '_');
-            const evFolder2 = await this.folder(evName.slice(0, 50), evFolder);
-            const evFileId  = await this.findFile('EVENTO.json', evFolder2);
-            await this.uploadJson('EVENTO.json', ev, evFolder2, evFileId);
+          const evName = (ev.date || '') + '_' + (ev.title || ev.id).replace(/[/\\:*?"<>|]/g, '_');
+          const evFolder2 = await this.folder(evName.slice(0, 50), evFolder);
 
-            // Notas
-            const notes = await DB.getAll('notes', 'eventId', ev.id).catch(() => []);
-            if (notes.length) {
-              const notasId = await this.findFile('NOTAS.json', evFolder2);
-              await this.uploadJson('NOTAS.json', notes, evFolder2, notasId);
-            }
+          if (this._needsUpload(ev.id, ev)) {
+            const evFileId = await this.findFile('EVENTO.json', evFolder2);
+            await this.uploadJson('EVENTO.json', ev, evFolder2, evFileId);
             this._markUploaded(ev.id, ev);
             uploaded++;
           } else {
             skipped++;
+          }
+
+          // Notas
+          const notes = await DB.getAll('notes', 'eventId', ev.id).catch(() => []);
+          if (notes.length) {
+            const notasHash = 'notes_' + ev.id;
+            if (this._needsUpload(notasHash, notes)) {
+              const notasId = await this.findFile('NOTAS.json', evFolder2);
+              await this.uploadJson('NOTAS.json', notes, evFolder2, notasId);
+              this._markUploaded(notasHash, notes);
+              uploaded++;
+            }
+          }
+
+          // Fotos (media) — guardamos referencias base64 en JSON
+          const media = await DB.getAll('media', 'eventId', ev.id).catch(() => []);
+          if (media.length) {
+            const mediaHash = 'media_' + ev.id;
+            if (this._needsUpload(mediaHash, media.map(m => m.id))) {
+              // Solo metadatos y dataUrl en JSON (puede ser grande)
+              const mediaData = media.map(m => ({
+                id: m.id, eventId: m.eventId, type: m.type,
+                caption: m.caption, lat: m.lat, lng: m.lng,
+                dataUrl: m.dataUrl
+              }));
+              const mediaFileId = await this.findFile('FOTOS.json', evFolder2);
+              await this.uploadJson('FOTOS.json', mediaData, evFolder2, mediaFileId);
+              this._markUploaded(mediaHash, media.map(m => m.id));
+              uploaded++;
+            }
+          }
+
+          // Audios
+          const audios = await DB.getAll('audios', 'eventId', ev.id).catch(() => []);
+          if (audios.length) {
+            const audioHash = 'audios_' + ev.id;
+            if (this._needsUpload(audioHash, audios.map(a => a.id + (a.transcript||'')))) {
+              const audiosData = audios.map(a => ({
+                id: a.id, eventId: a.eventId, type: a.type,
+                transcript: a.transcript, dataUrl: a.dataUrl
+              }));
+              const audioFileId = await this.findFile('AUDIOS.json', evFolder2);
+              await this.uploadJson('AUDIOS.json', audiosData, evFolder2, audioFileId);
+              this._markUploaded(audioHash, audios.map(a => a.id + (a.transcript||'')));
+              uploaded++;
+            }
+          }
+
+          // Archivos adjuntos (solo metadatos, no dataUrl por tamaño)
+          const files = await DB.getAll('files', 'eventId', ev.id).catch(() => []);
+          if (files.length) {
+            const filesHash = 'files_' + ev.id;
+            if (this._needsUpload(filesHash, files.map(f => f.id))) {
+              const filesData = files.map(f => ({
+                id: f.id, eventId: f.eventId, name: f.name,
+                type: f.type, size: f.size, dataUrl: f.dataUrl
+              }));
+              const filesFileId = await this.findFile('ARCHIVOS.json', evFolder2);
+              await this.uploadJson('ARCHIVOS.json', filesData, evFolder2, filesFileId);
+              this._markUploaded(filesHash, files.map(f => f.id));
+              uploaded++;
+            }
           }
         }
       }
