@@ -99,7 +99,8 @@ const Transcripcion = {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('model', 'whisper-1');
+    // Groq usa 'whisper-large-v3', OpenAI usa 'whisper-1'
+    formData.append('model', servicio === 'openai' ? 'whisper-1' : 'whisper-large-v3');
     if (idioma !== 'auto') formData.append('language', idioma);
     formData.append('response_format', 'text');
 
@@ -212,33 +213,28 @@ const Transcripcion = {
   },
 
   async _probarConexion() {
-    const servicio = document.getElementById('ts-servicio')?.value;
-    const apiKey   = document.getElementById('ts-apikey')?.value?.trim();
+    const servicio = document.getElementById('ts-servicio')?.value || this.getConfig().servicio;
+    const apiKey   = (document.getElementById('ts-apikey')?.value || this.getConfig().apiKey).trim();
     if (!apiKey) { Toast.show('Introduce una API Key primero', 'error'); return; }
 
     Toast.show('Probando conexión...');
     try {
-      // Probar con un audio silencioso de 1 segundo (WAV mínimo)
-      const wav = this._silentWav();
-      const form = new FormData();
-      form.append('file', new File([wav], 'test.wav', { type: 'audio/wav' }));
-      form.append('model', 'whisper-1');
-      form.append('response_format', 'text');
-
+      // Verificar API Key consultando modelos disponibles (no requiere audio)
       const url = servicio === 'openai'
-        ? 'https://api.openai.com/v1/audio/transcriptions'
-        : 'https://api.groq.com/openai/v1/audio/transcriptions';
+        ? 'https://api.openai.com/v1/models'
+        : 'https://api.groq.com/openai/v1/models';
 
       const res = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
+        headers: { 'Authorization': `Bearer ${apiKey}` }
       });
 
-      if (res.status === 401) throw new Error('API Key incorrecta');
-      if (!res.ok && res.status !== 400) throw new Error('Error ' + res.status);
+      if (res.status === 401) throw new Error('API Key incorrecta o sin permisos');
+      if (res.status === 403) throw new Error('API Key sin acceso');
+      if (!res.ok) throw new Error('Error ' + res.status);
 
-      Toast.show('✅ Conexión correcta — API Key válida', 'success');
+      const data = await res.json();
+      const nModelos = data.data?.length || 0;
+      Toast.show('✅ Conexión correcta — ' + nModelos + ' modelos disponibles', 'success');
     } catch(e) {
       Toast.show('❌ ' + e.message, 'error');
     }
@@ -287,19 +283,22 @@ const Transcripcion = {
   },
 
   async _probarDesde() {
+    // Probar directamente con la config guardada
     const cfg = this.getConfig();
-    // Crear modal temporal solo para probar
-    const servOld = document.getElementById('ts-servicio');
-    if (servOld) return; // ya hay modal abierto
-    const fakeModal = { servicio: cfg.servicio, apiKey: cfg.apiKey };
-    // Simular elementos del DOM temporalmente
-    const tempSel = { value: cfg.servicio };
-    const tempInput = { value: cfg.apiKey, trim: () => cfg.apiKey };
-    const origSel   = document.getElementById;
-    const mockGet   = (id) => id==='ts-servicio'?tempSel:id==='ts-apikey'?tempInput:origSel.call(document,id);
-    document.getElementById = mockGet;
-    await this._probarConexion();
-    document.getElementById = origSel;
+    if (!cfg.apiKey) { Toast.show('Configura la API Key primero', 'error'); return; }
+    Toast.show('Probando conexión...');
+    try {
+      const url = cfg.servicio === 'openai'
+        ? 'https://api.openai.com/v1/models'
+        : 'https://api.groq.com/openai/v1/models';
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
+      if (res.status === 401) throw new Error('API Key incorrecta');
+      if (!res.ok) throw new Error('Error ' + res.status);
+      const data = await res.json();
+      Toast.show('✅ Conexión correcta — ' + (data.data?.length||0) + ' modelos', 'success');
+    } catch(e) {
+      Toast.show('❌ ' + e.message, 'error');
+    }
   },
 };
 
