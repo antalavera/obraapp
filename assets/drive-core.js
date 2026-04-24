@@ -20,6 +20,7 @@ const DriveCore = {
   rootId:     null,
   configId:   null,  // ID del archivo config.json en Drive
   _syncing:   false,
+  _syncingTs: 0,  // timestamp when syncing started
   _timer:     null,
   _folderCache: {},
 
@@ -313,8 +314,13 @@ const DriveCore = {
   },
 
   async push(onProgress) {
+    // Reset si lleva más de 2 minutos bloqueado
+    if (this._syncing && Date.now() - this._syncingTs > 120000) {
+      this._syncing = false;
+    }
     if (!this.isConnected || this._syncing) return;
-    this._syncing = true;
+    this._syncing  = true;
+    this._syncingTs = Date.now();
     this._folderCache = {};
 
     try {
@@ -456,8 +462,13 @@ const DriveCore = {
 
   /* Pull: descarga de Drive lo que no tenemos o está más actualizado */
   async pull(onProgress) {
+    // Reset si lleva más de 2 minutos bloqueado
+    if (this._syncing && Date.now() - this._syncingTs > 120000) {
+      this._syncing = false;
+    }
     if (!this.isConnected || this._syncing) return;
-    this._syncing = true;
+    this._syncing  = true;
+    this._syncingTs = Date.now();
     this._folderCache = {};
 
     try {
