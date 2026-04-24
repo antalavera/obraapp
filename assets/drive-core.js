@@ -67,7 +67,42 @@ const DriveCore = {
      API DE GOOGLE DRIVE
   ════════════════════════════════════════════ */
 
+  async refreshToken() {
+    const refreshToken = localStorage.getItem('drive_refresh_token');
+    if (!refreshToken) return false;
+    try {
+      const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id:     this.clientId,
+          client_secret: this.clientSecret,
+          refresh_token: refreshToken,
+          grant_type:    'refresh_token',
+        })
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.access_token) return false;
+      this.token = data.access_token;
+      localStorage.setItem('drive_token', data.access_token);
+      localStorage.setItem('drive_token_ts', String(Date.now() + (data.expires_in||3600)*1000));
+      this.setStatus('connected', this.email || 'conectado');
+      console.log('[DriveCore] Token refrescado automáticamente');
+      return true;
+    } catch(e) {
+      console.warn('[DriveCore] refreshToken error:', e.message);
+      return false;
+    }
+  },
+
   async api(method, url, body) {
+    // Comprobar si el token está próximo a expirar (menos de 5 min)
+    const tokenTs = parseInt(localStorage.getItem('drive_token_ts') || '0');
+    if (tokenTs && Date.now() > tokenTs - 300000) {
+      await this.refreshToken();
+    }
+
     const opts = {
       method,
       headers: { 'Authorization': 'Bearer ' + this.token }
@@ -80,10 +115,23 @@ const DriveCore = {
     }
     const res = await fetch(url, opts);
     if (res.status === 401) {
-      // Token expirado
+      // Token expirado — intentar refrescar automáticamente
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        // Reintentar la petición con el nuevo token
+        opts.headers['Authorization'] = 'Bearer ' + this.token;
+        const res2 = await fetch(url, opts);
+        if (res2.ok) {
+          const ct2 = res2.headers.get('content-type') || '';
+          if (ct2.includes('json')) return res2.json();
+          return res2.text();
+        }
+      }
+      // Si no se puede refrescar, pedir reconexión
       this.token = null;
       localStorage.removeItem('drive_token');
       this.setStatus('disconnected', 'Sesión expirada — reconecta Drive');
+      Toast && Toast.show('Sesión de Drive expirada — reconecta en Perfil del estudio', 'error');
       throw new Error('TOKEN_EXPIRED');
     }
     if (!res.ok) {
@@ -419,7 +467,7 @@ const DriveCore = {
       await this.pullConfig();
 
       // Leer proyectos de Drive
-      const q = `'${rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and name!='${this.CONFIG_FILE}'`;
+      const q = `'${rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
       const res = await this.api('GET', `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`);
       const proyFolderId = res.files?.find(f => f.name === 'PROYECTOS')?.id;
       if (!proyFolderId) { onProgress?.('Sin proyectos en Drive'); return; }
@@ -439,9 +487,9 @@ const DriveCore = {
         // Saltar si fue borrado localmente
         if (deletions.some(d => d.id === pData.id)) continue;
 
-        // Merge con local (gana más reciente)
+        // Merge con local (gana si no existe o contenido diferente)
         const local = await DB.get('projects', pData.id).catch(() => null);
-        if (!local || new Date(pData.updatedAt) > new Date(local.updatedAt || 0)) {
+        if (!local || this._hash(pData) !== this._hash(local)) {
           await DB.put('projects', pData).catch(() => {});
           onProgress?.('  ↓ Proyecto: ' + (pData.nombre || pData.name));
         }
@@ -462,19 +510,64 @@ const DriveCore = {
           if (deletions.some(d => d.id === evData.id)) continue;
 
           const localEv = await DB.get('events', evData.id).catch(() => null);
-          if (!localEv || new Date(evData.updatedAt) > new Date(localEv.updatedAt || 0)) {
+          if (!localEv || this._hash(evData) !== this._hash(localEv)) {
             await DB.put('events', evData).catch(() => {});
+          }
 
-            // Notas
-            const notasId = await this.findFile('NOTAS.json', evFolder.id);
-            if (notasId) {
-              const notas = await this.downloadJson(notasId);
-              if (Array.isArray(notas)) {
-                for (const n of notas) {
-                  const localN = await DB.get('notes', n.id).catch(() => null);
-                  if (!localN || new Date(n.updatedAt) > new Date(localN.updatedAt || 0)) {
-                    await DB.put('notes', n).catch(() => {});
-                  }
+          // Notas
+          const notasId = await this.findFile('NOTAS.json', evFolder.id);
+          if (notasId) {
+            const notas = await this.downloadJson(notasId);
+            if (Array.isArray(notas)) {
+              for (const n of notas) {
+                const localN = await DB.get('notes', n.id).catch(() => null);
+                if (!localN || this._hash(n) !== this._hash(localN)) {
+                  await DB.put('notes', n).catch(() => {});
+                }
+              }
+            }
+          }
+
+          // Fotos
+          const fotosFileId = await this.findFile('FOTOS.json', evFolder.id);
+          if (fotosFileId) {
+            const fotos = await this.downloadJson(fotosFileId);
+            if (Array.isArray(fotos)) {
+              for (const m of fotos) {
+                if (!m?.id) continue;
+                const localM = await DB.get('media', m.id).catch(() => null);
+                if (!localM) {
+                  await DB.put('media', m).catch(() => {});
+                }
+              }
+            }
+          }
+
+          // Audios
+          const audiosFileId = await this.findFile('AUDIOS.json', evFolder.id);
+          if (audiosFileId) {
+            const audios = await this.downloadJson(audiosFileId);
+            if (Array.isArray(audios)) {
+              for (const a of audios) {
+                if (!a?.id) continue;
+                const localA = await DB.get('audios', a.id).catch(() => null);
+                if (!localA || (a.transcript && !localA.transcript)) {
+                  await DB.put('audios', a).catch(() => {});
+                }
+              }
+            }
+          }
+
+          // Archivos
+          const archivosFileId = await this.findFile('ARCHIVOS.json', evFolder.id);
+          if (archivosFileId) {
+            const archivos = await this.downloadJson(archivosFileId);
+            if (Array.isArray(archivos)) {
+              for (const f of archivos) {
+                if (!f?.id) continue;
+                const localF = await DB.get('files', f.id).catch(() => null);
+                if (!localF) {
+                  await DB.put('files', f).catch(() => {});
                 }
               }
             }
